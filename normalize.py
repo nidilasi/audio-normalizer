@@ -11,8 +11,7 @@ Dependencies:
     - ffmpeg (e.g. brew install ffmpeg)
 
 Usage:
-    python3 normalize.py /path/to/your/music/folder [--target-dbfs TARGET]
-    python3 normalize.py /Users/niklaskloiber/Music/Music/Media.localized --target-dbfs -20
+    python3 normalize.py /path/to/music/folder --target-dbfs -20
 
 """
 
@@ -43,7 +42,7 @@ def get_audio_export_format(filename):
         return "ipod"
 
 
-def match_target_amplitude(sound: AudioSegment, target_dBFS: float) -> AudioSegment:
+def match_target_amplitude(sound: AudioSegment, target_dBFS: float, threshold_dBFS: float) -> AudioSegment:
     """
     Normalize given AudioSegment to target dBFS.
 
@@ -53,12 +52,12 @@ def match_target_amplitude(sound: AudioSegment, target_dBFS: float) -> AudioSegm
     """
     change_in_dBFS = target_dBFS - sound.dBFS
     print(f" → Old dbfs: {sound.dBFS:.2f}, delta: {change_in_dBFS:.2f}")
-    if change_in_dBFS > -1 and change_in_dBFS < 1:
+    if change_in_dBFS > -threshold_dBFS and change_in_dBFS < threshold_dBFS:
         return None
 
     return sound.apply_gain(change_in_dBFS)
 
-def normalize_folder(folder: str, target_dBFS: float):
+def normalize_folder(folder: str, target_dBFS: float, threshold_dBFS: float):
     """
     Walk through `folder`, find all music files, normalize them, and overwrite.
 
@@ -74,7 +73,7 @@ def normalize_folder(folder: str, target_dBFS: float):
 
                 try:
                     audio = AudioSegment.from_file(file_path, format=get_audio_extension(filename))
-                    normalized_audio = match_target_amplitude(audio, target_dBFS)
+                    normalized_audio = match_target_amplitude(audio, target_dBFS, threshold_dBFS)
 
                     if normalized_audio == None:
                         print(f" → Nothing done. Target dBFS didn't differ that much from current dBFS\n")
@@ -92,7 +91,7 @@ def normalize_folder(folder: str, target_dBFS: float):
 
 def parse_args():
     parser = argparse.ArgumentParser(
-        description="Normalize volume of all MP3 files in a folder."
+        description="Normalize volume of supported music files in a folder."
     )
     parser.add_argument(
         "folder",
@@ -104,6 +103,14 @@ def parse_args():
         default=-20.0,
         help="Target loudness in dBFS (default: -20.0)",
     )
+    parser.add_argument(
+        "--threshold-dBFS",
+        type=float,
+        default=1.0,
+        help="dBFS difference between the current and the [--target-dbfs] that must be exceeded for the file to be processed (default: 1, min=1, max=100)",
+        metavar="THRESHOLD",
+        choices=range(1, 101)
+    )
     return parser.parse_args()
 
 if __name__ == "__main__":
@@ -113,6 +120,6 @@ if __name__ == "__main__":
         sys.exit(1)
 
     print(f"Scanning '{args.folder}' for music files…")
-    normalize_folder(args.folder, args.target_dbfs)
+    normalize_folder(args.folder, args.target_dbfs, args.threshold_dbfs)
     print("All done!")
 
